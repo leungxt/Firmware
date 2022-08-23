@@ -10,7 +10,6 @@
 ##################################################################################################
 hostname = duckduckgo.com
 
-
 #>>>>>>>>>>>>>>>>>>>>>>>翻译
 # yd  xxx (有道词典)
 ^https:\/\/duckduckgo.com\/\?q=yd\+([^&]+).+ url 302 http://dict.youdao.com/search?q=$1
@@ -24,7 +23,6 @@ hostname = duckduckgo.com
 # trj xxx (Google 译至日)
 ^https:\/\/duckduckgo.com\/\?q=trj\+([^&]+).+ url 302 https://translate.google.com/#view=home&op=translate&sl=auto&tl=ja&text=$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+trj.+ url 302 https://translate.google.com/#view=home&op=translate&sl=auto&tl=ja&text=$1
-
 
 
 #>>>>>>>>>>>>>>>>>>>>>>>社区
@@ -72,7 +70,6 @@ hostname = duckduckgo.com
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+rd.+ url 302 https://www.reddit.com/search?q=$1
 
 
-
 #>>>>>>>>>>>>>>>>>>>>>>>购物
 # zdm xxx (什么值得买)
 ^https:\/\/duckduckgo.com\/\?q=zdm\+([^&]+).+ url 302 https://search.m.smzdm.com/?v=b&s=$1
@@ -83,7 +80,6 @@ hostname = duckduckgo.com
 # tb  xxx (淘宝)
 ^https:\/\/duckduckgo.com\/\?q=tb\+([^&]+).+ url 302 https://s.m.taobao.com/h5?q=$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+tb.+ url 302 https://s.m.taobao.com/h5?q=$1
-
 
 #>>>>>>>>>>>>>>>>>>>>>>>视频
 # yt  xxx (YouTube)
@@ -108,7 +104,6 @@ hostname = duckduckgo.com
 ^https:\/\/duckduckgo.com\/\?q=ys\+([^&]+).+ url 302 https://cupfox.app/search?key=$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+ys.+ url 302 https://cupfox.app/search?key=$1
 
-
 #>>>>>>>>>>>>>>>>>>>>>>>苹果商店切换
 #源链接爬虫于>>https://www.liangjianghu.com/searchads-appstore-switch
 #Created by ddgksf2013，使用方法：输入区号，搜索即可
@@ -126,7 +121,6 @@ hostname = duckduckgo.com
 ^https:\/\/duckduckgo.com\/\?q=kr&.+ url 302 https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143466&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=kr&urlDesc=
 # tr  (切换至土耳其区)
 ^https:\/\/duckduckgo.com\/\?q=tr&.+ url 302 https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143480&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=tr&urlDesc=
-
 
 #>>>>>>>>>>>>>>>>>>>>>>>搜索
 # wiki  xxx (维基搜索)
