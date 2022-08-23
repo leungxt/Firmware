@@ -130,7 +130,7 @@ hostname = duckduckgo.com
 
 
 #>>>>>>>>>>>>>>>>>>>>>>>搜索
-#   xxx (无指令百度搜索)
+#   xxx (无指令时百度搜索)
 ^https:\/\/duckduckgo.com\/\?q=([^&]+).+ url 302 https://www.baidu.com/s?wd=$1
 # wiki  xxx (维基搜索)
 ^https:\/\/duckduckgo.com\/\?q=wk\+([^&]+).+ url 302 https://zh.wikipedia.org/wiki/$1
