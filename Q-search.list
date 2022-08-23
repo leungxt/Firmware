@@ -124,8 +124,8 @@ hostname = duckduckgo.com
 
 #>>>>>>>>>>>>>>>>>>>>>>>搜索
 # wiki  xxx (维基搜索)
-^https:\/\/duckduckgo.com\/\?q=wk\+([^&]+).+ url 302 https://zh.wikipedia.org/wiki/$1
-^https:\/\/duckduckgo.com\/\?q=([^+]+)\+wk.+ url 302 https://zh.wikipedia.org/wiki/$1
+^https:\/\/duckduckgo.com\/\?q=wiki\+([^&]+).+ url 302 https://zh.wikipedia.org/wiki/$1
+^https:\/\/duckduckgo.com\/\?q=([^+]+)\+wiki.+ url 302 https://zh.wikipedia.org/wiki/$1
 # yh  xxx (油猴搜索)
 ^https:\/\/duckduckgo.com\/\?q=yh\+([^&]+).+ url 302 https://greasyfork.org/zh-CN/scripts?q=$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+yh.+ url 302 https://greasyfork.org/zh-CN/scripts?q=$1 
@@ -133,8 +133,8 @@ hostname = duckduckgo.com
 ^https:\/\/duckduckgo.com\/\?q=gi\+([^&]+).+ url 302 https://www.google.com/search?&tbm=isch&q=$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+gi.+ url 302 https://www.google.com/search?&tbm=isch&q=$1
 # bing  xxx (必应)
-^https:\/\/duckduckgo.com\/\?q=bi\+([^&]+).+ url 302 https://cn.bing.com/search?q=$1
-^https:\/\/duckduckgo.com\/\?q=([^+]+)\+bi.+ url 302 https://cn.bing.com/search?q=$1
+^https:\/\/duckduckgo.com\/\?q=bing\+([^&]+).+ url 302 https://cn.bing.com/search?q=$1
+^https:\/\/duckduckgo.com\/\?q=([^+]+)\+bing.+ url 302 https://cn.bing.com/search?q=$1
 # ios  xxx (苹果应用搜索)
 ^https:\/\/duckduckgo.com\/\?q=ios\+([^&]+).+ url 302 https://www.qimai.cn/search/index/search/$1
 ^https:\/\/duckduckgo.com\/\?q=([^+]+)\+ios.+ url 302 https://www.qimai.cn/search/index/search/$1
