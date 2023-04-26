@@ -200,7 +200,7 @@ jobs:
         token: ${{ secrets.GH_TOKEN }}
         artifacts: ${{ env.FIRMWARE }}/*
         body: |
-          - 默认IP：192.168.0.1 默认密码为空
+          - 默认IP：192.168.0.3 默认密码为空
           - 当前使用版本:【编译前的最后一次[➦主源码](https://github.com/coolsnowwolf/lede)更新记录】
           ${{ env.useVersionInfo }}
 
