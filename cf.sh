@@ -5,7 +5,7 @@
 
 sleep 2s
 
-speed_url=https://alist.hustcn.com:8443/d/NAS/file/%E6%88%91%E7%9A%84%E8%BD%AF%E4%BB%B6/WIN/test_200m.txt
+speed_url=https://alist.hustcn.com:8443/d/NAS/downloads/soft/test_200m.txt
 
 ./CloudflareST -sl 10 -tl 300 -tll 40 -dn 10 -url $speed_url
 
