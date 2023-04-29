@@ -1,11 +1,11 @@
 #!/bin/sh
 
-./CloudflareST -sl 20 -tl 300 -tll 40 -dn 7
+#停止passwall
+/etc/init.d/passwall stop
 
 sleep 2s
 
-#停止passwall
-/etc/init.d/passwall stop
+./CloudflareST -sl 10 -tl 300 -tll 40 -dn 10
 
 sleep 2s
 
