@@ -5,7 +5,8 @@
 
 sleep 2s
 
-./CloudflareST -sl 20 -tl 300 -tll 40 -dn 5
+
+./CloudflareST -sl 30 -tl 300 -tll 40 -dn 5
 
 sleep 2s
 
