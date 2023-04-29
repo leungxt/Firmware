@@ -10,6 +10,6 @@ wget -O /root/ip.txt https://raw.githubusercontent.com/leungxt/OpenWrt-Firmware/
 
 wget -O /root/CloudflareST https://github.com/leungxt/OpenWrt-Firmware/raw/main/CloudflareST
 
-chmod +x /root/cf.sh  &&  chmod +x /root/CloudflareSTroot
+chmod +x /root/cf.sh  &&  chmod +x /root/CloudflareST
 
 # 30 4 * * * /root/cf.sh > /dev/null 
