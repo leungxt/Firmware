@@ -6,7 +6,7 @@
 sleep 2s
 
 
-./CloudflareST -sl 20 -tl 300 -tll 40 -dn 5 -cfcolo HKG,KHH,NRT,HND,KIX,SIN,LAX,SFO,SJC
+./CloudflareST -sl 20 -tl 300 -tll 40 -dn 10
 
 sleep 2s
 
