@@ -5,9 +5,7 @@
 
 sleep 2s
 
-speed_url=https://rmrbcmsonline.peopleapp.com/upload/document/202304/1682813071a18b3194a72147b6.txt
-
-./CloudflareST -sl 10 -tl 300 -tll 40 -dn 10 -url $speed_url
+./CloudflareST -sl 10 -tl 300 -tll 50 -dn 10 
 
 sleep 2s
 
