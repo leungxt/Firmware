@@ -5,7 +5,7 @@
 
 sleep 2s
 
-speed_url=https://alist.hustcn.com:8443/d/NAS/downloads/soft/test_200m.txt
+speed_url=https://rmrbcmsonline.peopleapp.com/upload/document/202304/1682813071a18b3194a72147b6.txt
 
 ./CloudflareST -sl 10 -tl 300 -tll 40 -dn 10 -url $speed_url
 
