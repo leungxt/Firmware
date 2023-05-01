@@ -1,426 +1,480 @@
 #!/bin/bash
+# better-cloudflare-ip
 
-# 使用说明：加在 openwrt 上系统 计划任务里 添加定时运行，如 0 4 * * 2,4,6 bash /root/cf-auto-passwall.sh > /dev/null
-# 0 4 * * 2,4,6 的意思是在每周二、周四、周六的凌晨4点会自动运行一次。/root/cf-auto-passwall.sh 是你脚本的绝对地址
-
-#########################################注意注意注意注意注意############################################
-
-# 1、请在脚本中修改你期望优选 IP 的带宽大小（默认5M）
-
-# 2、请更改 422 行 的 xxxxxxxxxx 字符串，为你自己 PassWall 的节点值（不会请看视频教程或是博客）
-
-######################################################################################################
-blue(){
-    echo -e "\033[34m\033[01m$1\033[0m"
-}
-green(){
-    echo -e "\033[32m\033[01m$1\033[0m"
-}
-red(){
-    echo -e "\033[31m\033[01m$1\033[0m"
-}
-clear
-green "=========================================================="
- blue "用途：用于自动筛选 CF IP，并自动替换优选 IP 为 PassWall 的节点地址"
- blue "网站： www.v2rayssr.com （已开启禁止国内访问）"
- blue "YouTube频道：波仔分享"
- blue "本脚本感谢 GitHub：Lbingyi 以及 Paniy"
- blue "本教程视频演示地址：https://youtu.be/WzRHi9f9QKg"
-green "=========================================================="
-green "=========================================================="
- red  "请在脚本中修改你期望优选 IP 的带宽大小（默认5M）脚本自动运行中....."
- red  "脚本第44行 bandwidth 后面的数值为期望优选带宽大小（ Mbps ）  "
-green "=================脚本正在运行中.....======================="
-sleep 8s
-/etc/init.d/haproxy stop
-/etc/init.d/passwall stop
-localport=8443
-remoteport=443
+function bettercloudflareip() {
+#  read -p "请设置期望的带宽大小(默认最小1,单位 Mbps):" bandwidth
+#  read -p "请设置RTT测试进程数(默认10,最大50):" tasknum
 declare -i bandwidth
-declare -i speed
+declare -i tasknum
+bandwidth=100
+tasknum=35
 
+  if [ -z "$bandwidth" ]; then
+    bandwidth=1
+  fi
+  if [ $bandwidth -eq 0 ]; then
+    bandwidth=1
+  fi
+  if [ -z "$tasknum" ]; then
+    tasknum=10
+  fi
+  if [ $tasknum -eq 0 ]; then
+    echo "进程数不能为0,自动设置为默认值"
+    tasknum=10
+  fi
+  if [ $tasknum -gt 50 ]; then
+    echo "超过最大进程限制,自动设置为最大值"
+    tasknum=50
+  fi
+  speed=$(($bandwidth * 128 * 1024))
+  starttime=$(date +%s)
+  cloudflaretest
+  realbandwidth=$(($max / 128))
+  endtime=$(date +%s)
+  echo "从服务器获取详细信息"
+  unset temp
+  if [ "$ips" == "ipv4" ]; then
+    if [ $tls == 1 ]; then
+      temp=($(curl --resolve $domain:443:$anycast --retry 1 -s https://$domain/cdn-cgi/trace --connect-timeout 2 --max-time 3))
+    else
+      temp=($(curl -x $anycast:80 --retry 1 -s http://$domain/cdn-cgi/trace --connect-timeout 2 --max-time 3))
+    fi
+  else
+    if [ $tls == 1 ]; then
+      temp=($(curl --resolve $domain:443:$anycast --retry 1 -s https://$domain/cdn-cgi/trace --connect-timeout 2 --max-time 3))
+    else
+      temp=($(curl -x [$anycast]:80 --retry 1 -s http://$domain/cdn-cgi/trace --connect-timeout 2 --max-time 3))
+    fi
+  fi
+  if [ $(echo ${temp[@]} | sed -e 's/ /\n/g' | grep colo= | wc -l) == 0 ]; then
+    publicip=获取超时
+    colo=获取超时
+  else
+    publicip=$(echo ${temp[@]} | sed -e 's/ /\n/g' | grep ip= | cut -f 2- -d'=')
+    colo=$(grep -w "($(echo ${temp[@]} | sed -e 's/ /\n/g' | grep colo= | cut -f 2- -d'='))" colo.txt | awk -F"-" '{print $1}')
+  fi
+  clear
+  echo "优选IP $anycast"
+  echo "公网IP $publicip"
+  if [ $tls == 1 ]; then
+    echo "支持端口 443 2053 2083 2087 2096 8443"
+  else
+    echo "支持端口 80 8080 8880 2052 2082 2086 2095"
+  fi
+  echo "设置带宽 $bandwidth Mbps"
+  echo "实测带宽 $realbandwidth Mbps"
+  echo "峰值速度 $max kB/s"
+  echo "往返延迟 $avgms 毫秒"
+  echo "数据中心 $colo"
+  echo "总计用时 $(($endtime - $starttime)) 秒"
 
-# 下面为期望优选带宽的大小 默认 5M
-bandwidth=5
+  uci set passwall.b2b3a4f5ace2428dba7ff3f22cd78d6f.address=$anycast
+  uci commit passwall
+  curl -s -0 /dev/null http://www.pushplus.plus/send \
+    -H 'Content-Type: application/json' \
+    -d '{
+        "token": "token",
+        "title": "'"passwall优选IP：$anycast 成功"'",
+        "content": "'"优选IP $anycast 满足 $bandwidth Mbps带宽需求
+              峰值速度 $max kB/s
+              实测带宽 $realbandwidth Mbps
+              数据中心 $colo
+              总计用时 $((endtime - starttime)) 秒"'"
+        }' \
+    --header "Content-Type: application/json"
 
+  sleep 1
+  /etc/init.d/haproxy start
+  /etc/init.d/passwall start
+}
 
-speed=bandwidth*128*1024
-starttime=`date +'%Y-%m-%d %H:%M:%S'`
-while true
-do
-	while true
-	do
-		declare -i m
-		declare -i n
-		declare -i per
-		rm -rf icmp temp data.txt meta.txt log.txt anycast.txt temp.txt speed.txt
-		mkdir icmp
-		while true
-		do
-			if [ -f "resolve.txt" ]
-			then
-				echo 指向解析获取CF节点IP
-				resolveip=$(cat resolve.txt)
-				while true
-				do
-					if [ ! -f "meta.txt" ]
-					then
-						curl --ipv4 --resolve speed.cloudflare.com:443:$resolveip --retry 3 -s https://speed.cloudflare.com/meta | sed -e 's/{//g' -e 's/}//g' -e 's/"//g' -e 's/,/\n/g'>meta.txt
-					else
-						asn=$(cat meta.txt | grep asn: | awk -F: '{print $2}')
-						city=$(cat meta.txt | grep city: | awk -F: '{print $2}')
-						latitude=$(cat meta.txt | grep latitude: | awk -F: '{print $2}')
-						longitude=$(cat meta.txt | grep longitude: | awk -F: '{print $2}')
-						curl --ipv4 --resolve service.baipiaocf.ml:443:$resolveip --retry 3 "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o data.txt -#
-						break
-					fi
-				done
-			else
-				echo DNS解析获取CF节点IP
-				while true
-				do
-					if [ ! -f "meta.txt" ]
-					then
-						curl --ipv4 --retry 3 -s https://speed.cloudflare.com/meta | sed -e 's/{//g' -e 's/}//g' -e 's/"//g' -e 's/,/\n/g'>meta.txt
-					else
-						asn=$(cat meta.txt | grep asn: | awk -F: '{print $2}')
-						city=$(cat meta.txt | grep city: | awk -F: '{print $2}')
-						latitude=$(cat meta.txt | grep latitude: | awk -F: '{print $2}')
-						longitude=$(cat meta.txt | grep longitude: | awk -F: '{print $2}')
-						curl --ipv4 --retry 3 "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o data.txt -#
-						break
-					fi
-				done
-			fi
-			if [ -f "data.txt" ]
-			then
-				break
-			fi
-		done
-		domain=$(cat data.txt | grep domain= | cut -f 2- -d'=')
-		file=$(cat data.txt | grep file= | cut -f 2- -d'=')
-		url=$(cat data.txt | grep url= | cut -f 2- -d'=')
-		app=$(cat data.txt | grep app= | cut -f 2- -d'=')
-		if [ "$app" != "20210903" ]
-		then
-			echo 发现新版本程序: $app
-			echo 更新地址: $url
-			echo 更新后才可以使用
-			exit
-		fi
-		for i in `cat data.txt | sed '1,4d'`
-		do
-			echo $i>>anycast.txt
-		done
-		rm -rf meta.txt data.txt
-		n=0
-		m=$(cat anycast.txt | wc -l)
-		for i in `cat anycast.txt`
-		do
-			ping -c 20 -i 1 -n -q $i > icmp/$n.log&
-			n=$[$n+1]
-			per=$n*100/$m
-			while true
-			do
-				p=$(ps -ef | grep ping | grep -v "grep" | wc -l)
-				if [ $p -ge 100 ]
-				then
-					echo 正在测试 ICMP 丢包率:进程数 $p,已完成 $per %
-					sleep 1
-				else
-					echo 正在测试 ICMP 丢包率:进程数 $p,已完成 $per %
-					break
-				fi
-			done
-		done
-		rm -rf anycast.txt
-		while true
-		do
-			p=$(ps | grep ping | grep -v "grep" | wc -l)
-			if [ $p -ne 0 ]
-			then
-				echo 等待 ICMP 进程结束:剩余进程数 $p
-				sleep 1
-			else
-				echo ICMP 丢包率测试完成
-				break
-			fi
-		done
-		cat icmp/*.log | grep 'statistics\|loss\|avg' | sed 'N;N;s/\n/ /g' | awk -F, '{print $1,$3}' | awk '{print $2,$9,$15}' | awk -F% '{print $1,$2}' | awk -F/ '{print $1,$2}' | awk '{print $2,$4,$1}' | sort -n | awk '{print $3}' | sed '21,$d' > ip.txt
-		rm -rf icmp
-		echo 选取20个丢包率最少的IP地址下载测速
-		mkdir temp
-		for i in `cat ip.txt`
-		do
-			echo $i 启动测速
-			curl --resolve $domain:443:$i https://$domain/$file -o temp/$i -s --connect-timeout 2 --max-time 10&
-		done
-		echo 等待测速进程结束,筛选出三个优选的IP
-		sleep 15
-		echo 测速完成
-		ls -S temp > ip.txt
-		rm -rf temp
-		n=$(wc -l ip.txt | awk '{print $1}')
-		if [ $n -ge 3 ]; then
-			first=$(sed -n '1p' ip.txt)
-			second=$(sed -n '2p' ip.txt)
-			third=$(sed -n '3p' ip.txt)
-			rm -rf ip.txt
-			echo 优选的IP地址为 $first - $second - $third
-			echo 第一次测试 $first
-			curl --resolve $domain:443:$first https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max1
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$first
-				break
-			fi
-			max=$[$max/1024]
-			max1=max
-			echo 峰值速度 $max kB/s
-			echo 第二次测试 $first
-			curl --resolve $domain:443:$first https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max2
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$first
-				break
-			fi
-			max=$[$max/1024]
-			max2=max
-			echo 峰值速度 $max kB/s
-			if [ $max1 -ge $max2 ]
-			then
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$first --retry 3 -s -X POST -d ''20210903-$first-$max1'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			else
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$first --retry 3 -s -X POST -d ''20210903-$first-$max2'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			fi
-			echo 第一次测试 $second
-			curl --resolve $domain:443:$second https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max1
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$second
-				break
-			fi
-			max=$[$max/1024]
-			max1=max
-			echo 峰值速度 $max kB/s
-			echo 第二次测试 $second
-			curl --resolve $domain:443:$second https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max2
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$second
-				break
-			fi
-			max=$[$max/1024]
-			max2=max
-			echo 峰值速度 $max kB/s
-			if [ $max1 -ge $max2 ]
-			then
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$second --retry 3 -s -X POST -d ''20210903-$second-$max1'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			else
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$second --retry 3 -s -X POST -d ''20210903-$second-$max2'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			fi
-			echo 第一次测试 $third
-			curl --resolve $domain:443:$third https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max1
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$third
-				break
-			fi
-			max=$[$max/1024]
-			max1=max
-			echo 峰值速度 $max kB/s
-			echo 第二次测试 $third
-			curl --resolve $domain:443:$third https://$domain/$file -o /dev/null --connect-timeout 5 --max-time 10 > log.txt 2>&1
-			cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >> speed.txt
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'`
-			do
-				declare -i k
-				k=$i
-				k=k*1024
-				echo $k >> speed.txt
-			done
-			for i in `cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'`
-			do
-				i=$(echo | awk '{print '$i'*10 }')
-				declare -i M
-				M=$i
-				M=M*1024*1024/10
-				echo $M >> speed.txt
-			done
-			declare -i max
-			declare -i max2
-			max=0
-			for i in `cat speed.txt`
-			do
-				if [ $i -ge $max ]; then
-					max=$i
-				fi
-			done
-			rm -rf log.txt speed.txt
-			if [ $max -ge $speed ]; then
-				anycast=$third
-				break
-			fi
-			max=$[$max/1024]
-			max2=max
-			echo 峰值速度 $max kB/s
-			if [ $max1 -ge $max2 ]
-			then
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$third --retry 3 -s -X POST -d ''20210903-$third-$max1'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			else
-				curl --ipv4 --resolve service.baipiaocf.ml:443:$third --retry 3 -s -X POST -d ''20210903-$third-$max2'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o /dev/null --connect-timeout 5 --max-time 10
-			fi
-		fi
-	done
-		break
+function rtthttps() {
+  avgms=0
+  n=1
+  for ip in $(cat rtt/$1.txt); do
+    while true; do
+      if [ $n -le 3 ]; then
+        rsp=$(curl --resolve $domain:443:$ip https://$domain/cdn-cgi/trace -o /dev/null -s --connect-timeout 1 --max-time 3 -w %{time_connect}_%{http_code})
+        if [ $(echo $rsp | awk -F_ '{print $2}') != 200 ]; then
+          avgms=0
+          n=1
+          break
+        else
+          avgms=$(($(echo $rsp | awk -F_ '{printf ("%d\n",$1*1000000)}') + $avgms))
+          n=$(($n + 1))
+        fi
+      else
+        avgms=$(($avgms / 3000))
+        if [ $avgms -lt 10 ]; then
+          echo 00$avgms $ip >>rtt/$1.log
+        elif [ $avgms -ge 10 ] && [ $avgms -lt 100 ]; then
+          echo 0$avgms $ip >>rtt/$1.log
+        else
+          echo $avgms $ip >>rtt/$1.log
+        fi
+        avgms=0
+        n=1
+        break
+      fi
+    done
+  done
+  rm -rf rtt/$1.txt
+}
+
+function rtthttp() {
+  avgms=0
+  n=1
+  for ip in $(cat rtt/$1.txt); do
+    while true; do
+      if [ $n -le 3 ]; then
+        if [ $(echo $ip | grep : | wc -l) == 0 ]; then
+          rsp=$(curl -x $ip:80 http://$domain/cdn-cgi/trace -o /dev/null -s --connect-timeout 1 --max-time 3 -w %{time_connect}_%{http_code})
+        else
+          rsp=$(curl -x [$ip]:80 http://$domain/cdn-cgi/trace -o /dev/null -s --connect-timeout 1 --max-time 3 -w %{time_connect}_%{http_code})
+        fi
+        if [ $(echo $rsp | awk -F_ '{print $2}') != 200 ]; then
+          avgms=0
+          n=1
+          break
+        else
+          avgms=$(($(echo $rsp | awk -F_ '{printf ("%d\n",$1*1000000)}') + $avgms))
+          n=$(($n + 1))
+        fi
+      else
+        avgms=$(($avgms / 3000))
+        if [ $avgms -lt 10 ]; then
+          echo 00$avgms $ip >>rtt/$1.log
+        elif [ $avgms -ge 10 ] && [ $avgms -lt 100 ]; then
+          echo 0$avgms $ip >>rtt/$1.log
+        else
+          echo $avgms $ip >>rtt/$1.log
+        fi
+        avgms=0
+        n=1
+        break
+      fi
+    done
+  done
+  rm -rf rtt/$1.txt
+}
+
+function speedtesthttps() {
+  rm -rf log.txt speed.txt
+  curl --resolve $domain:443:$1 https://$domain/$file -o /dev/null --connect-timeout 1 --max-time 10 >log.txt 2>&1
+  cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >>speed.txt
+  for i in $(cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'); do
+    k=$i
+    k=$(($k * 1024))
+    echo $k >>speed.txt
+  done
+  for i in $(cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'); do
+    i=$(echo | awk '{print '$i'*10 }')
+    M=$i
+    M=$(($M * 1024 * 1024 / 10))
+    echo $M >>speed.txt
+  done
+  max=0
+  for i in $(cat speed.txt); do
+    if [ $i -ge $max ]; then
+      max=$i
+    fi
+  done
+  rm -rf log.txt speed.txt
+  echo $max
+}
+
+function speedtesthttp() {
+  rm -rf log.txt speed.txt
+  if [ $(echo $1 | grep : | wc -l) == 0 ]; then
+    curl -x $1:80 http://$domain/$file -o /dev/null --connect-timeout 1 --max-time 10 >log.txt 2>&1
+  else
+    curl -x [$1]:80 http://$domain/$file -o /dev/null --connect-timeout 1 --max-time 10 >log.txt 2>&1
+  fi
+  cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep -v 'k\|M' >>speed.txt
+  for i in $(cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep k | sed 's/k//g'); do
+    k=$i
+    k=$(($k * 1024))
+    echo $k >>speed.txt
+  done
+  for i in $(cat log.txt | tr '\r' '\n' | awk '{print $NF}' | sed '1,3d;$d' | grep M | sed 's/M//g'); do
+    i=$(echo | awk '{print '$i'*10 }')
+    M=$i
+    M=$(($M * 1024 * 1024 / 10))
+    echo $M >>speed.txt
+  done
+  max=0
+  for i in $(cat speed.txt); do
+    if [ $i -ge $max ]; then
+      max=$i
+    fi
+  done
+  rm -rf log.txt speed.txt
+  echo $max
+}
+
+function cloudflaretest() {
+  while true; do
+    while true; do
+      rm -rf rtt rtt.txt log.txt speed.txt
+      mkdir rtt
+      echo "正在生成 $ips"
+      unset temp
+      if [ "$ips" == "ipv4" ]; then
+        n=0
+        iplist=100
+        while true; do
+          for i in $(awk 'BEGIN{srand()} {print rand()"\t"$0}' $filename | sort -n | awk '{print $2} NR=='$iplist' {exit}' | awk -F\. '{print $1"."$2"."$3}'); do
+            temp[$n]=$(echo $i.$(($RANDOM % 256)))
+            n=$(($n + 1))
+          done
+          if [ $n -ge $iplist ]; then
+            break
+          fi
+        done
+        while true; do
+          if [ $(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u | wc -l) -ge $iplist ]; then
+            break
+          else
+            for i in $(awk 'BEGIN{srand()} {print rand()"\t"$0}' $filename | sort -n | awk '{print $2} NR=='$(($iplist - $(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u | wc -l)))' {exit}' | awk -F\. '{print $1"."$2"."$3}'); do
+              temp[$n]=$(echo $i.$(($RANDOM % 256)))
+              n=$(($n + 1))
+            done
+          fi
+        done
+      else
+        n=0
+        iplist=100
+        while true; do
+          for i in $(awk 'BEGIN{srand()} {print rand()"\t"$0}' $filename | sort -n | awk '{print $2} NR=='$iplist' {exit}' | awk -F: '{print $1":"$2":"$3}'); do
+            temp[$n]=$(echo $i:$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))))
+            n=$(($n + 1))
+          done
+          if [ $n -ge $iplist ]; then
+            break
+          fi
+        done
+        while true; do
+          if [ $(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u | wc -l) -ge $iplist ]; then
+            break
+          else
+            for i in $(awk 'BEGIN{srand()} {print rand()"\t"$0}' $filename | sort -n | awk '{print $2} NR=='$(($iplist - $(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u | wc -l)))' {exit}' | awk -F: '{print $1":"$2":"$3}'); do
+              temp[$n]=$(echo $i:$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))):$(printf '%x\n' $(($RANDOM * 2 + $RANDOM % 2))))
+              n=$(($n + 1))
+            done
+          fi
+        done
+      fi
+      ipnum=$(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u | wc -l)
+      if [ $tasknum == 0 ]; then
+        tasknum=1
+      fi
+      if [ $ipnum -lt $tasknum ]; then
+        tasknum=$ipnum
+      fi
+      n=1
+      for i in $(echo ${temp[@]} | sed -e 's/ /\n/g' | sort -u); do
+        echo $i >>rtt/$n.txt
+        if [ $n == $tasknum ]; then
+          n=1
+        else
+          n=$(($n + 1))
+        fi
+      done
+      n=1
+      while true; do
+        if [ $tls == 1 ]; then
+          rtthttps $n &
+        else
+          rtthttp $n &
+        fi
+        if [ $n == $tasknum ]; then
+          break
+        else
+          n=$(($n + 1))
+        fi
+      done
+      while true; do
+        n=$(ls rtt | grep txt | wc -l)
+        if [ $n -ne 0 ]; then
+          echo "$(date +'%H:%M:%S') 等待RTT测试结束,剩余进程数 $n"
+        else
+          echo "$(date +'%H:%M:%S') RTT测试完成"
+          break
+        fi
+        sleep 1
+      done
+      n=$(ls rtt | grep log | wc -l)
+      if [ $n == 0 ]; then
+        echo "当前所有IP都存在RTT丢包"
+        echo "继续新的RTT测试"
+      else
+        cat rtt/*.log >rtt.txt
+        status=0
+        echo "待测速的IP地址"
+        cat rtt.txt | sort | awk '{print $2" 往返延迟 "$1" 毫秒"}'
+        for i in $(cat rtt.txt | sort | awk '{print $1"_"$2}'); do
+          avgms=$(echo $i | awk -F_ '{print $1}')
+          ip=$(echo $i | awk -F_ '{print $2}')
+          echo "正在测试 $ip"
+          if [ $tls == 1 ]; then
+            max=$(speedtesthttps $ip)
+          else
+            max=$(speedtesthttp $ip)
+          fi
+          if [ $max -ge $speed ]; then
+            status=1
+            anycast=$ip
+            max=$(($max / 1024))
+            echo "$ip 峰值速度 $max kB/s"
+            rm -rf rtt rtt.txt
+            break
+          else
+            max=$(($max / 1024))
+            echo "$ip 峰值速度 $max kB/s"
+          fi
+        done
+        if [ $status == 1 ]; then
+          break
+        fi
+      fi
+    done
+    break
+  done
+}
+
+function singlehttps() {
+  read -p "请输入需要测速的IP: " ip
+  read -p "请输入需要测速的端口(默认443): " port
+  if [ -z "$ip" ]; then
+    echo "未输入IP"
+  fi
+  if [ -z "$port" ]; then
+    port=443
+  fi
+  echo "正在测速 $ip 端口 $port"
+  speed_download=$(curl --resolve $domain:$port:$ip https://$domain:$port/$file -o /dev/null --connect-timeout 5 --max-time 15 -w %{speed_download} | awk -F\. '{printf ("%d\n",$1/1024)}')
+}
+
+function singlehttp() {
+  read -p "请输入需要测速的IP: " ip
+  read -p "请输入需要测速的端口(默认80): " port
+  if [ -z "$ip" ]; then
+    echo "未输入IP"
+  fi
+  if [ -z "$port" ]; then
+    port=80
+  fi
+  echo "正在测速 $ip 端口 $port"
+  if [ $(echo $ip | grep : | wc -l) == 0 ]; then
+    speed_download=$(curl -x $ip:$port http://$domain:$port/$file -o /dev/null --connect-timeout 5 --max-time 15 -w %{speed_download} | awk -F\. '{printf ("%d\n",$1/1024)}')
+  else
+    speed_download=$(curl -x [$ip]:$port http://$domain:$port/$file -o /dev/null --connect-timeout 5 --max-time 15 -w %{speed_download} | awk -F\. '{printf ("%d\n",$1/1024)}')
+  fi
+}
+
+function datacheck() {
+  clear
+  echo "如果这些下面这些文件下载失败,可以手动访问网址下载保存至同级目录"
+  echo "https://www.baipiao.eu.org/cloudflare/colo 另存为 colo.txt"
+  echo "https://www.baipiao.eu.org/cloudflare/url 另存为 url.txt"
+  echo "https://www.baipiao.eu.org/cloudflare/ips-v4 另存为 ips-v4.txt"
+  echo "https://www.baipiao.eu.org/cloudflare/ips-v6 另存为 ips-v6.txt"
+  while true; do
+    if [ ! -f "colo.txt" ]; then
+      echo "从服务器下载数据中心信息 colo.txt"
+      curl --retry 2 -s https://www.baipiao.eu.org/cloudflare/colo -o colo.txt
+    elif [ ! -f "url.txt" ]; then
+      echo "从服务器下载测速文件地址 url.txt"
+      curl --retry 2 -s https://www.baipiao.eu.org/cloudflare/url -o url.txt
+    elif [ ! -f "ips-v4.txt" ]; then
+      echo "从服务器下载IPV4数据 ips-v4.txt"
+      curl --retry 2 -s https://www.baipiao.eu.org/cloudflare/ips-v4 -o ips-v4.txt
+    elif [ ! -f "ips-v6.txt" ]; then
+      echo "从服务器下载IPV6数据 ips-v6.txt"
+      curl --retry 2 -s https://www.baipiao.eu.org/cloudflare/ips-v6 -o ips-v6.txt
+    else
+      break
+    fi
+  done
+}
+datacheck
+url=$(sed -n '1p' url.txt)
+domain=$(echo $url | cut -f 1 -d'/')
+file=$(echo $url | cut -f 2- -d'/')
+clear
+while true; do
+  #  echo "1. IPV4优选(TLS)"
+  #  echo "2. IPV4优选"
+  #  echo "3. IPV6优选(TLS)"
+  #  echo "4. IPV6优选"
+  #  echo "5. 单IP测速(TLS)"
+  #  echo "6. 单IP测速"
+  #  echo "7. 清空缓存"
+  #  echo "8. 更新数据"
+  #  echo -e "0. 退出\n"
+  #  read -p "请选择菜单(默认0): " menu
+  echo -e "\033[41;36m 脚本源 badafans 地址 https://github.com/badafans/better-cloudflare-ip \033[0m"
+  echo -e "\033[41;37m 该脚本 地址 https://github.com/524819297/openwrt_cf_passwall \033[0m"
+  echo 需要先清空缓存然后进行IPV4优选，请修改menu=0,ipv6请自行修改menu等参数
+  echo -e "\033[42;36m =================脚本正在运行中.....======================= \033[0m"
+  /etc/init.d/haproxy stop
+  /etc/init.d/passwall stop
+  sleep 8
+  menu=1
+  if [ -z "$menu" ]; then
+    menu=0
+  fi
+  if [ $menu == 0 ]; then
+    clear
+    echo "退出成功"
+    break
+  fi
+  if [ $menu == 1 ]; then
+    ips=ipv4
+    filename=ips-v4.txt
+    tls=1
+    bettercloudflareip
+    break
+  fi
+  if [ $menu == 2 ]; then
+    ips=ipv4
+    filename=ips-v4.txt
+    tls=0
+    bettercloudflareip
+    break
+  fi
+  if [ $menu == 3 ]; then
+    ips=ipv6
+    filename=ips-v6.txt
+    tls=1
+    bettercloudflareip
+    break
+  fi
+  if [ $menu == 4 ]; then
+    ips=ipv6
+    filename=ips-v6.txt
+    tls=0
+    bettercloudflareip
+    break
+  fi
+  if [ $menu == 5 ]; then
+    singlehttps
+    clear
+    echo "$ip 平均速度 $speed_download kB/s"
+  fi
+  if [ $menu == 6 ]; then
+    singlehttp
+    clear
+    echo "$ip 平均速度 $speed_download kB/s"
+  fi
+  if [ $menu == 7 ]; then
+    rm -rf rtt rtt.txt log.txt speed.txt
+    clear
+    echo "缓存已经清空"
+  fi
+  if [ $menu == 8 ]; then
+    rm -rf colo.txt url.txt ips-v4.txt ips-v6.txt
+    datacheck
+    clear
+  fi
 done
-	max=$[$max/1024]
-	declare -i realbandwidth
-	realbandwidth=max/128
-	endtime=`date +'%Y-%m-%d %H:%M:%S'`
-	start_seconds=$(date --date="$starttime" +%s)
-	end_seconds=$(date --date="$endtime" +%s)
-	clear
-	curl --ipv4 --resolve service.baipiaocf.ml:443:$anycast --retry 3 -s -X POST -d ''20210903-$anycast-$max'' "https://service.baipiaocf.ml?asn="$asn"&city="$city"" -o temp.txt
-	publicip=$(cat temp.txt | grep publicip= | cut -f 2- -d'=')
-	colo=$(cat temp.txt | grep colo= | cut -f 2- -d'=')
-	rm -rf temp.txt
-	echo 优选IP $anycast 满足 $bandwidth Mbps带宽需求
-	echo 公网IP $publicip
-	echo 自治域 AS$asn
-	echo 经纬度 $longitude,$latitude
-	echo META城市 $city
-	echo 实测带宽 $realbandwidth Mbps
-	echo 峰值速度 $max kB/s
-	echo 数据中心 $colo
-	echo 总计用时 $((end_seconds-start_seconds)) 秒
-	uci set passwall.xxxxxxxxxx.address=$anycast
-	uci commit passwall
-	/etc/init.d/haproxy restart
-	/etc/init.d/passwall restart
-	exit
